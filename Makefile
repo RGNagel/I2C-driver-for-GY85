@@ -16,4 +16,9 @@ clean:
 			SUBDIRS=$(PWD) clean
 
 deploy:
-	scp *.ko root@192.168.10.1:/lib/modules/5.4.30/kernel/drivers/i2c/
+	scp GY-85.ko root@192.168.10.1:/lib/modules/5.4.30/kernel/drivers/i2c/
+
+start:
+	ssh root@192.168.10.1 "
+	insmod /lib/modules/5.4.30/kernel/drivers/input/input-polldev.ko
+	insmod /lib/modules/5.4.30/kernel/drivers/i2c/GY-85.ko
