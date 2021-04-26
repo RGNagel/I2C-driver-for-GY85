@@ -116,49 +116,81 @@ static void GY85_poll(struct input_polled_dev *pl_dev)
 	// input_sync(ioaccel->polled_input->input);
 }
 
-
 static ssize_t read_ADXL345_x(struct file *fp, char __user *user_buffer,
-			 size_t count, loff_t *position)
+		size_t count, loff_t *position)
 {
 	u32 written = 0;
 	char buf[3];
 
-    scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.x);
+	written = scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.x);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
-				      written);
+			written);
 }
 static ssize_t read_ADXL345_y(struct file *fp, char __user *user_buffer,
-			 size_t count, loff_t *position)
+		size_t count, loff_t *position)
 {
 	u32 written = 0;
 	char buf[3];
 
-    scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.y);
+	written = scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.y);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
-				      written);
+			written);
 }
 static ssize_t read_ADXL345_z(struct file *fp, char __user *user_buffer,
-			 size_t count, loff_t *position)
+		size_t count, loff_t *position)
 {
 	u32 written = 0;
 	char buf[3];
 
-    scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.z);
+	written = scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.z);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
-				      written);
+			written);
 }
 
-static const struct file_operations fops_read_ADXL345_x = { .read = read_ADXL345_x,
-						       .owner = THIS_MODULE };
-static const struct file_operations fops_read_ADXL345_y = { .read = read_ADXL345_y,
-						       .owner = THIS_MODULE };
-static const struct file_operations fops_read_ADXL345_z = { .read = read_ADXL345_z,
-						       .owner = THIS_MODULE };
+static const struct file_operations fops_read_ADXL345_x = {.read =
+		read_ADXL345_x,
+		.owner = THIS_MODULE};
+static const struct file_operations fops_read_ADXL345_y = {.read =
+		read_ADXL345_y,
+		.owner = THIS_MODULE};
+static const struct file_operations fops_read_ADXL345_z = {.read =
+		read_ADXL345_z,
+		.owner = THIS_MODULE};
 
+static ssize_t read_attr_ADXL345_x(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%i\n", g_GY85_dev.ADXL345.data.x);
+}
+static ssize_t read_attr_ADXL345_y(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", g_GY85_dev.ADXL345.data.y);
+}
+static ssize_t read_attr_ADXL345_z(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", g_GY85_dev.ADXL345.data.z);
+}
 
+static DEVICE_ATTR(ADXL345_x, 0644, read_attr_ADXL345_x, NULL);
+static DEVICE_ATTR(ADXL345_y, 0644, read_attr_ADXL345_y, NULL);
+static DEVICE_ATTR(ADXL345_z, 0644, read_attr_ADXL345_z, NULL);
+
+static struct attribute *ADXL345_attrs[] = {
+		&dev_attr_ADXL345_x.attr,
+		&dev_attr_ADXL345_y.attr,
+		&dev_attr_ADXL345_z.attr,
+		NULL
+};
+
+static struct attribute_group ADXL345_attr_group = {
+		.name = "ADXL345", // directory
+		.attrs = ADXL345_attrs,
+};
 
 /**
  * it is call for each i2c device on the bus that matches
@@ -168,11 +200,11 @@ static const struct file_operations fops_read_ADXL345_z = { .read = read_ADXL345
 static int GY85_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
-	 if (!g_GY85_dev.debugfs_dir) {
+//	if (!g_GY85_dev.debugfs_dir) {
 		g_GY85_dev.debugfs_dir =
 				debugfs_create_dir("GY-85",
-						NULL /* /sys/kernel/debug */);
-	 }
+				NULL /* /sys/kernel/debug */);
+//	}
 
 	switch (client->addr) {
 	case 0x53:
@@ -180,22 +212,30 @@ static int GY85_probe(struct i2c_client *client,
 		dev_info(&client->dev, "probing ADXL345\n");
 		g_GY85_dev.ADXL345.i2c_client = client;
 		g_GY85_dev.ADXL345.is_active = true;
-        
-        // debugfs
+
+		// debugfs
 		g_GY85_dev.ADXL345.debugfs_dir = debugfs_create_dir("ADXL345",
 				g_GY85_dev.debugfs_dir);
-        if (g_GY85_dev.ADXL345.debugfs_dir) {
-            debugfs_create_file("x", 0444, g_GY85_dev.ADXL345.debugfs_dir, NULL,
-                    &fops_read_ADXL345_x);
-            debugfs_create_file("y", 0444, g_GY85_dev.ADXL345.debugfs_dir, NULL,
-                    &fops_read_ADXL345_y);
-            debugfs_create_file("z", 0444, g_GY85_dev.ADXL345.debugfs_dir, NULL,
-                    &fops_read_ADXL345_z);
-        }
-		
-        /* enter measurement mode */
+		if (g_GY85_dev.ADXL345.debugfs_dir) {
+			debugfs_create_file("x", 0444,
+					g_GY85_dev.ADXL345.debugfs_dir, NULL,
+					&fops_read_ADXL345_x);
+			debugfs_create_file("y", 0444,
+					g_GY85_dev.ADXL345.debugfs_dir, NULL,
+					&fops_read_ADXL345_y);
+			debugfs_create_file("z", 0444,
+					g_GY85_dev.ADXL345.debugfs_dir, NULL,
+					&fops_read_ADXL345_z);
+		}
+
+		if (sysfs_create_group(&client->dev.kobj, &ADXL345_attr_group)
+				!= 0)
+			dev_info(&client->dev,
+					"failed to create sysfs group\n");
+
+		/* enter measurement mode */
 		i2c_smbus_write_byte_data(client, ADXL345_REG_POWER_CTL,
-				PCTL_MEASURE);
+		PCTL_MEASURE);
 
 		break;
 	case 0x69:
@@ -283,6 +323,7 @@ static int GY85_remove(struct i2c_client *client)
 		struct GY85_dev *gy85 = i2c_get_clientdata(client);
 		input_unregister_polled_device(gy85->polled_input);
 		debugfs_remove_recursive(g_GY85_dev.debugfs_dir);
+		sysfs_remove_group(&client->dev.kobj, &ADXL345_attr_group);
 	}
 
 	return 0;
