@@ -34,6 +34,9 @@ struct GY85_dev {
 		bool is_active;
 		struct i2c_client *i2c_client;
 		struct dentry *debugfs_dir;
+		struct {
+			s16 x, y, z, temp;
+		} data;
 	} ITG3205;
 
 	struct {
@@ -50,7 +53,12 @@ struct GY85_dev {
 struct GY85_dev g_GY85_dev = {
 		.HMC5883L.is_active = false,
 		.ITG3205.is_active = false,
-		.ADXL345.is_active = false
+		.ITG3205.data = {0},
+		.ADXL345.is_active = false,
+		.ADXL345.data = {0},
+		.debugfs_dir = NULL,
+		.polled_input = NULL,
+
 };
 
 /**
@@ -66,42 +74,100 @@ enum ADXL345_REGS {
 	ADXL345_REG_DATAZ_MSB = 0x37
 };
 
+/**
+ * ref.: https://www.tinyosshop.com/datasheet/itg3205.pdf
+ * 
+ */
+enum ITG3205_REGS {
+	ITG3205_REG_TEMP_H = 0x1B,
+	ITG3205_REG_TEMP_L = 0x1C,
+	ITG3205_REG_X_H = 0x1D,
+	ITG3205_REG_X_L = 0x1E,
+	ITG3205_REG_Y_H = 0x1F,
+	ITG3205_REG_Y_L = 0x20,
+	ITG3205_REG_Z_H = 0x21,
+	ITG3205_REG_Z_L = 0x22,
+    ITG3205_POWER_MANAGEMENT = 0x3E
+};
+
 #define PCTL_MEASURE	(1 << 3)
+
+/**
+ * @brief convert MSB and LSB bytes to signed 16-bit two's complement 
+ * 
+ * @param MSB most significant byte
+ * @param LSB least significant byte
+ * @return s16 signed 16-bit two's complemen
+ */
+static s16 to_s16(u8 MSB, u8 LSB)
+{
+	return (MSB << 8) | LSB;
+}
 
 /* poll function */
 static void GY85_poll(struct input_polled_dev *pl_dev)
 {
 	struct GY85_dev *dev = pl_dev->private;
-	s32 val = 0;
+	s32 msb = 0, lsb = 0;
 
 	if (dev->ADXL345.is_active) {
 		// x axis
-		val = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
+		lsb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAX_LSB);
-		dev->ADXL345.data.x = 0xFF & val;
-		val = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
+		msb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAX_MSB);
-		dev->ADXL345.data.x = (0xFF & val) << 8;
+        if (msb >= 0 && lsb >= 0)
+            dev->ADXL345.data.x = to_s16(msb, lsb);
 
 		// y axis
-		val = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
+		lsb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAY_LSB);
-		dev->ADXL345.data.y = 0xFF & val;
-		val = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
+		msb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAY_MSB);
-		dev->ADXL345.data.y = (0xFF & val) << 8;
+        if (msb >= 0 && lsb >= 0)
+            dev->ADXL345.data.y = to_s16(msb, lsb);
 
 		// z axis
-		val = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
+		lsb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAZ_LSB);
-		dev->ADXL345.data.z = 0xFF & val;
-		val = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
+		msb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAZ_MSB);
-		dev->ADXL345.data.z = (0xFF & val) << 8;
+        if (msb >= 0 && lsb >= 0)
+            dev->ADXL345.data.z = to_s16(msb, lsb);
 	}
 
 	if (dev->ITG3205.is_active) {
+		// x axis
+		msb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_X_H);
+		lsb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_X_L);
+		if (msb >= 0 && lsb >= 0)
+			dev->ITG3205.data.x = to_s16(msb, lsb);
 
+		// y axis
+		msb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_Y_H);
+		lsb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_Y_L);
+		if (msb >= 0 && lsb >= 0)
+			dev->ITG3205.data.y = to_s16(msb, lsb);
+
+		// z axis
+		msb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_Z_H);
+		lsb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_Z_L);
+		if (msb >= 0 && lsb >= 0)
+			dev->ITG3205.data.z = to_s16(msb, lsb);
+
+		// temperature
+		msb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_TEMP_H);
+		lsb = i2c_smbus_read_byte_data(dev->ITG3205.i2c_client,
+				ITG3205_REG_TEMP_L);
+		if (msb >= 0 && lsb >= 0)
+			dev->ITG3205.data.temp = to_s16(msb, lsb);
 	}
 
 	if (dev->HMC5883L.is_active) {
@@ -116,13 +182,16 @@ static void GY85_poll(struct input_polled_dev *pl_dev)
 	// input_sync(ioaccel->polled_input->input);
 }
 
+/**
+ * ADXL345 debugfs operations 
+ */
 static ssize_t read_ADXL345_x(struct file *fp, char __user *user_buffer,
 		size_t count, loff_t *position)
 {
 	u32 written = 0;
-	char buf[3];
+	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.x);
+	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ADXL345.data.x);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -131,9 +200,9 @@ static ssize_t read_ADXL345_y(struct file *fp, char __user *user_buffer,
 		size_t count, loff_t *position)
 {
 	u32 written = 0;
-	char buf[3];
+	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.y);
+	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ADXL345.data.y);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -142,9 +211,9 @@ static ssize_t read_ADXL345_z(struct file *fp, char __user *user_buffer,
 		size_t count, loff_t *position)
 {
 	u32 written = 0;
-	char buf[3];
+	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i", g_GY85_dev.ADXL345.data.z);
+	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ADXL345.data.z);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -158,6 +227,68 @@ static const struct file_operations fops_read_ADXL345_y = {.read =
 		.owner = THIS_MODULE};
 static const struct file_operations fops_read_ADXL345_z = {.read =
 		read_ADXL345_z,
+		.owner = THIS_MODULE};
+
+/**
+ * ITG3205 debugfs operations 
+ */
+static ssize_t read_ITG3205_x(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	u32 written = 0;
+	char buf[15];
+
+	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ITG3205.data.x);
+
+	return simple_read_from_buffer(user_buffer, count, position, buf,
+			written);
+}
+static ssize_t read_ITG3205_y(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	u32 written = 0;
+	char buf[15];
+
+	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ITG3205.data.y);
+
+	return simple_read_from_buffer(user_buffer, count, position, buf,
+			written);
+}
+static ssize_t read_ITG3205_z(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	u32 written = 0;
+	char buf[15];
+
+	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ITG3205.data.z);
+
+	return simple_read_from_buffer(user_buffer, count, position, buf,
+			written);
+}
+static ssize_t read_ITG3205_temp(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	u32 written = 0;
+	char buf[15];
+
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.ITG3205.data.temp);
+
+	return simple_read_from_buffer(user_buffer, count, position, buf,
+			written);
+}
+
+static const struct file_operations fops_read_ITG3205_x = {.read =
+		read_ITG3205_x,
+		.owner = THIS_MODULE};
+static const struct file_operations fops_read_ITG3205_y = {.read =
+		read_ITG3205_y,
+		.owner = THIS_MODULE};
+static const struct file_operations fops_read_ITG3205_z = {.read =
+		read_ITG3205_z,
+		.owner = THIS_MODULE};
+static const struct file_operations fops_read_ITG3205_temp = {.read =
+		read_ITG3205_temp,
 		.owner = THIS_MODULE};
 
 static ssize_t read_attr_ADXL345_x(struct device *dev,
@@ -200,11 +331,11 @@ static struct attribute_group ADXL345_attr_group = {
 static int GY85_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
-//	if (!g_GY85_dev.debugfs_dir) {
+	if (!g_GY85_dev.debugfs_dir) {
 		g_GY85_dev.debugfs_dir =
 				debugfs_create_dir("GY-85",
 				NULL /* /sys/kernel/debug */);
-//	}
+	}
 
 	switch (client->addr) {
 	case 0x53:
@@ -227,6 +358,10 @@ static int GY85_probe(struct i2c_client *client,
 					g_GY85_dev.ADXL345.debugfs_dir, NULL,
 					&fops_read_ADXL345_z);
 		}
+		else {
+			dev_info(&client->dev,
+					"failed to create debugfs dir for ADXL\n");
+		}
 
 		if (sysfs_create_group(&client->dev.kobj, &ADXL345_attr_group)
 				!= 0)
@@ -245,6 +380,28 @@ static int GY85_probe(struct i2c_client *client,
 		g_GY85_dev.ITG3205.is_active = true;
 		g_GY85_dev.ITG3205.debugfs_dir = debugfs_create_dir("ITG3205",
 				g_GY85_dev.debugfs_dir);
+		if (g_GY85_dev.ITG3205.debugfs_dir) {
+			debugfs_create_file("x", 0444,
+					g_GY85_dev.ITG3205.debugfs_dir, NULL,
+					&fops_read_ITG3205_x);
+			debugfs_create_file("y", 0444,
+					g_GY85_dev.ITG3205.debugfs_dir, NULL,
+					&fops_read_ITG3205_y);
+			debugfs_create_file("z", 0444,
+					g_GY85_dev.ITG3205.debugfs_dir, NULL,
+					&fops_read_ITG3205_z);
+			debugfs_create_file("temp", 0444,
+					g_GY85_dev.ITG3205.debugfs_dir, NULL,
+					&fops_read_ITG3205_temp);
+		}
+		else {
+			dev_info(&client->dev,
+					"failed to create debugfs dir for ITG3205\n");
+		}
+
+        /* enter normal mode */
+        i2c_smbus_write_byte_data(client, ITG3205_POWER_MANAGEMENT, 0x00);
+        
 
 		break;
 	case 0x1E:
