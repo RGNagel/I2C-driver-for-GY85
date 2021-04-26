@@ -1,0 +1,32 @@
+diff --git a/output/build/linux-5.4.30/arch/arm/boot/dts/am335x-boneblack-common.dtsi b/arch/arm/boot/dts/am335x-boneblack-common.dtsi
+index 91f93bc897..2523211e28 100644
+--- a/arch/arm/boot/dts/am335x-boneblack-common.dtsi
++++ b/arch/arm/boot/dts/am335x-boneblack-common.dtsi
+@@ -112,6 +112,27 @@
+ 	};
+ };
+ 
++&i2c2 {
++	status = "okay";
++	clock-frequency = <100000>;
++	
++	pinctrl-0 = <&i2c2_pins>;
++	pinctrl-names = "default";
++	
++	ADXL345: ADXL345@53 {
++		compatible = "GY-85";
++		reg = <0x53>;
++	};
++	ITG3205: ITG3205@69 {
++		compatible = "GY-85";
++		reg = <0x69>;
++	};
++	HMC5883L: HMC5883L@1E {
++		compatible = "GY-85";
++		reg = <0x1E>;
++	};
++};
++
+ &rtc {
+ 	system-power-controller;
+ };

@@ -1,4 +1,4 @@
-obj-m += i2c-module.o
+obj-m += GY-85.o
 
 BUILDROOT_DIR ?= /home/rgnagel/Desktop/buildroot
 
@@ -16,4 +16,4 @@ clean:
 			SUBDIRS=$(PWD) clean
 
 deploy:
-	scp *.ko root@192.168.10.1:/lib/modules/5.4.30/
+	scp *.ko root@192.168.10.1:/lib/modules/5.4.30/kernel/drivers/i2c/
