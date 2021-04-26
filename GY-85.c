@@ -43,6 +43,9 @@ struct GY85_dev {
 		bool is_active;
 		struct i2c_client *i2c_client;
 		struct dentry *debugfs_dir;
+		struct {
+			s16 x, y, z;
+		} data;
 	} HMC5883L;
 
 	struct dentry *debugfs_dir;
@@ -52,6 +55,7 @@ struct GY85_dev {
 
 struct GY85_dev g_GY85_dev = {
 		.HMC5883L.is_active = false,
+		.HMC5883L.data = {0},
 		.ITG3205.is_active = false,
 		.ITG3205.data = {0},
 		.ADXL345.is_active = false,
@@ -59,6 +63,12 @@ struct GY85_dev g_GY85_dev = {
 		.debugfs_dir = NULL,
 		.polled_input = NULL,
 
+};
+
+enum ADDRESSES_I2C_DEVICES {
+	ADDR_I2C_ADXL345 = 0x53,
+	ADDR_I2C_ITG3205 = 0x69,
+	ADDR_I2C_HMC5883L = 0x1E
 };
 
 /**
@@ -87,7 +97,20 @@ enum ITG3205_REGS {
 	ITG3205_REG_Y_L = 0x20,
 	ITG3205_REG_Z_H = 0x21,
 	ITG3205_REG_Z_L = 0x22,
-    ITG3205_POWER_MANAGEMENT = 0x3E
+	ITG3205_POWER_MANAGEMENT = 0x3E
+};
+
+/**
+ * ref.: http://www.farnell.com/datasheets/1683374.pdf
+ */
+enum HMC5883L_REGS {
+	HMC5883L_REG_MODE = 2,
+	HMC5883L_REG_X_MSB,
+	HMC5883L_REG_X_LSB,
+	HMC5883L_REG_Z_MSB,
+	HMC5883L_REG_Z_LSB,
+	HMC5883L_REG_Y_MSB,
+	HMC5883L_REG_Y_LSB
 };
 
 #define PCTL_MEASURE	(1 << 3)
@@ -116,24 +139,24 @@ static void GY85_poll(struct input_polled_dev *pl_dev)
 				ADXL345_REG_DATAX_LSB);
 		msb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAX_MSB);
-        if (msb >= 0 && lsb >= 0)
-            dev->ADXL345.data.x = to_s16(msb, lsb);
+		if (msb >= 0 && lsb >= 0)
+			dev->ADXL345.data.x = to_s16(msb, lsb);
 
 		// y axis
 		lsb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAY_LSB);
 		msb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAY_MSB);
-        if (msb >= 0 && lsb >= 0)
-            dev->ADXL345.data.y = to_s16(msb, lsb);
+		if (msb >= 0 && lsb >= 0)
+			dev->ADXL345.data.y = to_s16(msb, lsb);
 
 		// z axis
 		lsb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAZ_LSB);
 		msb = i2c_smbus_read_byte_data(dev->ADXL345.i2c_client,
 				ADXL345_REG_DATAZ_MSB);
-        if (msb >= 0 && lsb >= 0)
-            dev->ADXL345.data.z = to_s16(msb, lsb);
+		if (msb >= 0 && lsb >= 0)
+			dev->ADXL345.data.z = to_s16(msb, lsb);
 	}
 
 	if (dev->ITG3205.is_active) {
@@ -171,15 +194,30 @@ static void GY85_poll(struct input_polled_dev *pl_dev)
 	}
 
 	if (dev->HMC5883L.is_active) {
+		// x axis
+		msb = i2c_smbus_read_byte_data(dev->HMC5883L.i2c_client,
+				HMC5883L_REG_X_MSB);
+		lsb = i2c_smbus_read_byte_data(dev->HMC5883L.i2c_client,
+				HMC5883L_REG_X_LSB);
+		if (msb >= 0 && lsb >= 0)
+			dev->HMC5883L.data.x = to_s16(msb, lsb);
 
+		// y axis
+		msb = i2c_smbus_read_byte_data(dev->HMC5883L.i2c_client,
+				HMC5883L_REG_Y_MSB);
+		lsb = i2c_smbus_read_byte_data(dev->HMC5883L.i2c_client,
+				HMC5883L_REG_Y_LSB);
+		if (msb >= 0 && lsb >= 0)
+			dev->HMC5883L.data.y = to_s16(msb, lsb);
+
+		// z axis
+		msb = i2c_smbus_read_byte_data(dev->HMC5883L.i2c_client,
+				HMC5883L_REG_Z_MSB);
+		lsb = i2c_smbus_read_byte_data(dev->HMC5883L.i2c_client,
+				HMC5883L_REG_Z_LSB);
+		if (msb >= 0 && lsb >= 0)
+			dev->HMC5883L.data.z = to_s16(msb, lsb);
 	}
-
-	// if ((val > 0xc0) && (val < 0xff)) {
-	// 	input_event(ioaccel->polled_input->input, EV_KEY, KEY_1, 1);
-	// } else {
-	// 	input_event(ioaccel->polled_input->input, EV_KEY, KEY_1, 0);
-	// }
-	// input_sync(ioaccel->polled_input->input);
 }
 
 /**
@@ -191,7 +229,8 @@ static ssize_t read_ADXL345_x(struct file *fp, char __user *user_buffer,
 	u32 written = 0;
 	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ADXL345.data.x);
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.ADXL345.data.x);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -202,7 +241,8 @@ static ssize_t read_ADXL345_y(struct file *fp, char __user *user_buffer,
 	u32 written = 0;
 	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ADXL345.data.y);
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.ADXL345.data.y);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -213,7 +253,8 @@ static ssize_t read_ADXL345_z(struct file *fp, char __user *user_buffer,
 	u32 written = 0;
 	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ADXL345.data.z);
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.ADXL345.data.z);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -238,7 +279,8 @@ static ssize_t read_ITG3205_x(struct file *fp, char __user *user_buffer,
 	u32 written = 0;
 	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ITG3205.data.x);
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.ITG3205.data.x);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -249,7 +291,8 @@ static ssize_t read_ITG3205_y(struct file *fp, char __user *user_buffer,
 	u32 written = 0;
 	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ITG3205.data.y);
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.ITG3205.data.y);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -260,7 +303,8 @@ static ssize_t read_ITG3205_z(struct file *fp, char __user *user_buffer,
 	u32 written = 0;
 	char buf[15];
 
-	written = scnprintf(buf, sizeof(buf), "%i\n", g_GY85_dev.ITG3205.data.z);
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.ITG3205.data.z);
 
 	return simple_read_from_buffer(user_buffer, count, position, buf,
 			written);
@@ -290,6 +334,57 @@ static const struct file_operations fops_read_ITG3205_z = {.read =
 static const struct file_operations fops_read_ITG3205_temp = {.read =
 		read_ITG3205_temp,
 		.owner = THIS_MODULE};
+
+/**
+ * HMC5883L debugfs operations
+ */
+static ssize_t read_HMC5883L_x(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	u32 written = 0;
+	char buf[15];
+
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.HMC5883L.data.x);
+
+	return simple_read_from_buffer(user_buffer, count, position, buf,
+			written);
+}
+static ssize_t read_HMC5883L_y(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	u32 written = 0;
+	char buf[15];
+
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.HMC5883L.data.y);
+
+	return simple_read_from_buffer(user_buffer, count, position, buf,
+			written);
+}
+static ssize_t read_HMC5883L_z(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	u32 written = 0;
+	char buf[15];
+
+	written = scnprintf(buf, sizeof(buf), "%i\n",
+			g_GY85_dev.HMC5883L.data.z);
+
+	return simple_read_from_buffer(user_buffer, count, position, buf,
+			written);
+}
+
+static const struct file_operations fops_read_HMC5883L_x = {.read =
+		read_HMC5883L_x,
+		.owner = THIS_MODULE};
+static const struct file_operations fops_read_HMC5883L_y = {.read =
+		read_HMC5883L_y,
+		.owner = THIS_MODULE};
+static const struct file_operations fops_read_HMC5883L_z = {.read =
+		read_HMC5883L_z,
+		.owner = THIS_MODULE};
+
 
 static ssize_t read_attr_ADXL345_x(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -338,7 +433,7 @@ static int GY85_probe(struct i2c_client *client,
 	}
 
 	switch (client->addr) {
-	case 0x53:
+	case ADDR_I2C_ADXL345:
 		// ADXL345 -  0x53 — Three axis acceleration
 		dev_info(&client->dev, "probing ADXL345\n");
 		g_GY85_dev.ADXL345.i2c_client = client;
@@ -373,7 +468,7 @@ static int GY85_probe(struct i2c_client *client,
 		PCTL_MEASURE);
 
 		break;
-	case 0x69:
+	case ADDR_I2C_ITG3205:
 		// ITG3205  - 0x69 — Three axis gyroscope
 		dev_info(&client->dev, "probing ITG3205\n");
 		g_GY85_dev.ITG3205.i2c_client = client;
@@ -399,19 +494,39 @@ static int GY85_probe(struct i2c_client *client,
 					"failed to create debugfs dir for ITG3205\n");
 		}
 
-        /* enter normal mode */
-        i2c_smbus_write_byte_data(client, ITG3205_POWER_MANAGEMENT, 0x00);
-        
+		/* enter normal mode */
+		i2c_smbus_write_byte_data(client, ITG3205_POWER_MANAGEMENT,
+				0x00);
 
 		break;
-	case 0x1E:
+
+	case ADDR_I2C_HMC5883L:
 		// HMC5883L - 0x1E — Three axis magnetic field
 		dev_info(&client->dev, "probing HMC5883L\n");
 		g_GY85_dev.HMC5883L.i2c_client = client;
 		g_GY85_dev.HMC5883L.is_active = true;
 		g_GY85_dev.HMC5883L.debugfs_dir = debugfs_create_dir("HMC5883L",
 				g_GY85_dev.debugfs_dir);
+		if (g_GY85_dev.HMC5883L.debugfs_dir) {
+			debugfs_create_file("x", 0444,
+					g_GY85_dev.HMC5883L.debugfs_dir, NULL,
+					&fops_read_HMC5883L_x);
+			debugfs_create_file("y", 0444,
+					g_GY85_dev.HMC5883L.debugfs_dir, NULL,
+					&fops_read_HMC5883L_y);
+			debugfs_create_file("z", 0444,
+					g_GY85_dev.HMC5883L.debugfs_dir, NULL,
+					&fops_read_HMC5883L_z);
+		}
+		else {
+			dev_info(&client->dev,
+					"failed to create debugfs dir for HMC5883L\n");
+		}
 
+		/**
+		 * enter continuous mode
+		 */
+		i2c_smbus_write_byte_data(client, HMC5883L_REG_MODE, 0x00);
 		break;
 	}
 
