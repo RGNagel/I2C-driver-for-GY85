@@ -385,39 +385,6 @@ static const struct file_operations fops_read_HMC5883L_z = {.read =
 		read_HMC5883L_z,
 		.owner = THIS_MODULE};
 
-
-static ssize_t read_attr_ADXL345_x(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%i\n", g_GY85_dev.ADXL345.data.x);
-}
-static ssize_t read_attr_ADXL345_y(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d\n", g_GY85_dev.ADXL345.data.y);
-}
-static ssize_t read_attr_ADXL345_z(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d\n", g_GY85_dev.ADXL345.data.z);
-}
-
-static DEVICE_ATTR(ADXL345_x, 0644, read_attr_ADXL345_x, NULL);
-static DEVICE_ATTR(ADXL345_y, 0644, read_attr_ADXL345_y, NULL);
-static DEVICE_ATTR(ADXL345_z, 0644, read_attr_ADXL345_z, NULL);
-
-static struct attribute *ADXL345_attrs[] = {
-		&dev_attr_ADXL345_x.attr,
-		&dev_attr_ADXL345_y.attr,
-		&dev_attr_ADXL345_z.attr,
-		NULL
-};
-
-static struct attribute_group ADXL345_attr_group = {
-		.name = "ADXL345", // directory
-		.attrs = ADXL345_attrs,
-};
-
 /**
  * it is call for each i2c device on the bus that matches
  * our 'compatible' string
@@ -457,11 +424,6 @@ static int GY85_probe(struct i2c_client *client,
 			dev_info(&client->dev,
 					"failed to create debugfs dir for ADXL\n");
 		}
-
-		if (sysfs_create_group(&client->dev.kobj, &ADXL345_attr_group)
-				!= 0)
-			dev_info(&client->dev,
-					"failed to create sysfs group\n");
 
 		/* enter measurement mode */
 		i2c_smbus_write_byte_data(client, ADXL345_REG_POWER_CTL,
@@ -595,7 +557,6 @@ static int GY85_remove(struct i2c_client *client)
 		struct GY85_dev *gy85 = i2c_get_clientdata(client);
 		input_unregister_polled_device(gy85->polled_input);
 		debugfs_remove_recursive(g_GY85_dev.debugfs_dir);
-		sysfs_remove_group(&client->dev.kobj, &ADXL345_attr_group);
 	}
 
 	return 0;
