@@ -566,11 +566,11 @@ static int GY85_remove(struct i2c_client *client)
  * device tree:
  * will match all i2c devices that have the compatible string
  */
-static const struct of_device_id ioaccel_dt_ids[] = {
+static const struct of_device_id GY85_dt_ids[] = {
 		{.compatible = "GY-85", },
 		{}
 };
-MODULE_DEVICE_TABLE(of, ioaccel_dt_ids);
+MODULE_DEVICE_TABLE(of, GY85_dt_ids);
 
 /* FIXME: don't know what it means exactly */
 /**
@@ -593,7 +593,7 @@ static struct i2c_driver GY85_driver = {
 		.driver = {
 				.name = "GY-85",
 				.owner = THIS_MODULE,
-				.of_match_table = ioaccel_dt_ids,
+				.of_match_table = GY85_dt_ids,
 		},
 		.probe = GY85_probe,
 		.remove = GY85_remove,
